@@ -99,6 +99,8 @@ uint8_t EGU_AYRILMA_TESPIT=0;
 uint8_t EGU_MOTOR_ATESLEME_TALEP_IN=0;
 uint8_t EGU_STAGE_DURUM=0;
 uint8_t EGU_UCUS_BASLADIMI=0;
+uint8_t EGU_FITIL =0;
+
 float EGU_BATTERY=0;
 float EGU_IRTIFA=0;
 float EGU_ANGLE=0;
@@ -365,6 +367,8 @@ int main(void)
 						f2u8_EGU_IRTIFA.array[i]=lora_rx_buffer[i+62];
 				}
 					  EGU_IRTIFA=f2u8_EGU_IRTIFA.fVal;
+
+					  EGU_FITIL=lora_rx_buffer[53];
 
 					  EGU_UCUS_BASLADIMI=lora_rx_buffer[66];
 					  EGU_STAGE_DURUM=lora_rx_buffer[67];
