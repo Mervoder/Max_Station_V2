@@ -123,7 +123,26 @@ uint8_t boostv4_battery=0;
 uint8_t boostv4_mod=0;
 uint8_t booststage_communication=0;
 
+typedef struct
+{	uint8_t satsinview;
+	float gpsaltitude;
+	float gpslatitude;
+	float gpslongitude;
+	float speed;
+	float altitude;
+	float temperature;
+	float accx;
+	float accy;
+	float accz;
+	float roll;
+	float pitch;
+	uint8_t battery;
+	uint8_t mod;
+	uint8_t communication;
 
+}dataTypeDef;
+
+dataTypeDef Payload;
 
 uint32_t tim1=0;
 uint32_t takim_sayac;
@@ -162,6 +181,7 @@ void NEXTION_SendString (char *ID, char *string);
 void NEXTION_SendNum (char *obj, int32_t num);
 void NEXTION_SendFloat (char *obj, float num, int dp);
 void HYI_BUFFER_Fill();
+void Payload_union_converter(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -246,11 +266,11 @@ int main(void)
   {
 
 
-	  if(HAL_GetTick()-tim1>500)
+	  if(HAL_GetTick()-tim1>10)
 {
 		  HYI_BUFFER_Fill();
 
-	  if(lora_rx_buffer[3]==2){
+	  if(lora_rx_buffer[3]==2 && lora_rx_buffer[50] == 0x31){
 
 		  sustgpssatsinview=lora_rx_buffer[4];
 
@@ -375,7 +395,7 @@ int main(void)
 					  EGU_MOTOR_ATESLEME_TALEP_IN=lora_rx_buffer[68];
 }
 
-	  if(lora_rx_buffer[3]==1){
+	  if(lora_rx_buffer[3]==1 && lora_rx_buffer[50]==0x32){
 
 		  boostgpssatsinview=lora_rx_buffer[4];
 
@@ -465,9 +485,20 @@ int main(void)
 					 booststage_communication=lora_rx_buffer[51];
 
 
-}
+	  	  }
 
+		  if(lora_rx_buffer[3]==3 && lora_rx_buffer[50]==0x33)
+		  {
 
+		  Payload.satsinview=lora_rx_buffer[4];
+
+		  Payload_union_converter();
+
+		  Payload.battery=lora_rx_buffer[49];
+		  Payload.mod=lora_rx_buffer[50];
+		  Payload.communication=lora_rx_buffer[51];
+
+		  }
 
 
 	  tim1=HAL_GetTick();
@@ -938,10 +969,86 @@ void HYI_BUFFER_Fill()
 
 
 
+}
+void Payload_union_converter(void)
+{
+	 float2unit8 f2u8;
+			 for(uint8_t i=0;i<4;i++)
+			 {
+				 f2u8.array[i]=lora_rx_buffer[i+5];
+				 HYI_BUFFER[34+i]=lora_rx_buffer[i+5]; // 34 35 36 37
+			 }
+			 Payload.gpsaltitude=f2u8.fVal;
 
 
+			 for(uint8_t i=0;i<4;i++)
+			 {
+				 f2u8.array[i]=lora_rx_buffer[i+9];
+				 HYI_BUFFER[38+i]=lora_rx_buffer[i+9]; // 38 39 40 41
+			 }
+			 Payload.gpslatitude=f2u8.fVal;
+
+			 for(uint8_t i=0;i<4;i++)
+			 {
+				 f2u8.array[i]=lora_rx_buffer[i+13];
+				 HYI_BUFFER[42+i]=lora_rx_buffer[i+13]; // 42 43 44 45
+			 }
+			 Payload.gpslongitude=f2u8.fVal;
+
+			 for(uint8_t i=0;i<4;i++)
+			 {
+				 f2u8.array[i]=lora_rx_buffer[i+17];
+			 }
+			 Payload.altitude=f2u8.fVal;
 
 
+			 for(uint8_t i=0;i<4;i++)
+			 {
+				 f2u8.array[i]=lora_rx_buffer[i+21];
+			 }
+			 Payload.speed=f2u8.fVal;
+
+
+			 for(uint8_t i=0;i<4;i++)
+			 {
+				 f2u8.array[i]=lora_rx_buffer[i+25];
+			 }
+			 Payload.temperature=f2u8.fVal;
+
+
+			 for(uint8_t i=0;i<4;i++)
+			 {
+				 f2u8.array[i]=lora_rx_buffer[i+29];
+			 }
+			 Payload.accx=f2u8.fVal;
+
+
+			 for(uint8_t i=0;i<4;i++)
+			 {
+				 f2u8.array[i]=lora_rx_buffer[i+33];
+			 }
+			 Payload.accy=f2u8.fVal;
+
+
+		      for(uint8_t i=0;i<4;i++)
+			 {
+		    	  f2u8.array[i]=lora_rx_buffer[i+37];
+			 }
+		      Payload.accz=f2u8.fVal;
+
+
+			  for(uint8_t i=0;i<4;i++)
+			 {
+				  f2u8.array[i]=lora_rx_buffer[i+41];
+			 }
+			  Payload.roll=f2u8.fVal;
+
+
+			  for(uint8_t i=0;i<4;i++)
+			 {
+				  f2u8.array[i]=lora_rx_buffer[i+45];
+			 }
+			  Payload.pitch=f2u8.fVal;
 }
 
 /* USER CODE END 4 */
