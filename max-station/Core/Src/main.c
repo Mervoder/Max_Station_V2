@@ -26,6 +26,8 @@
 #include "lwgps/lwgps.h"
 #include "w25q.h"
 #include <math.h>
+#include "stdio.h"
+#include "string.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -142,8 +144,30 @@ typedef struct
 
 }dataTypeDef;
 
-dataTypeDef Payload;
+dataTypeDef Payload, Booster , Sustainer;
 
+
+///////////////////////////////////////////////////booster ekran
+uint8_t b_altitude[8];
+uint8_t b_temperature[5];
+uint8_t b_speed[5];
+uint8_t b_roll[5];
+uint8_t b_pitch[5];
+uint8_t b_latitude[6];
+uint8_t b_longitude[6];
+
+uint8_t enum_bs[9];
+uint8_t enum_s[9];
+
+uint8_t s_altitude[8];
+uint8_t s_temperature[5];
+uint8_t s_speed[5];
+uint8_t s_roll[5];
+uint8_t s_pitch[5];
+uint8_t s_latitude[6];
+uint8_t s_longitude[6];
+
+///////////////////////////////////////////////////
 uint32_t tim1=0;
 uint32_t takim_sayac;
 
@@ -180,8 +204,10 @@ double calculateAngle(double lat1, double lon1, double lat2, double lon2);
 void NEXTION_SendString (char *ID, char *string);
 void NEXTION_SendNum (char *obj, int32_t num);
 void NEXTION_SendFloat (char *obj, float num, int dp);
-void HYI_BUFFER_Fill();
+void HYI_BUFFER_Fill(void);
 void Payload_union_converter(void);
+void Enum_State_bs(void);
+void Enum_State_s(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -201,16 +227,16 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 HAL_UART_Receive_IT(&huart3, &rx_data_lora, 1);
 	}
 
-//	if(huart == &huart2) {
-//			if( rx_index < 70) {
-//				gps_rx_buffer[rx_index++] = rx_data;
-//			} else {
-//				lwgps_process(&gps, gps_rx_buffer, rx_index+1);
-//				rx_index = 0;
-//				rx_data = 0;
-//			}
-//			HAL_UART_Receive_IT(&huart2, &rx_data, 1);
-//		}
+	if(huart == &huart2) {
+			if( rx_data != '\n'&& rx_index < RX_BUFFER_SIZE) {
+				gps_rx_buffer[rx_index++] = rx_data;
+			} else {
+				lwgps_process(&gps, gps_rx_buffer, rx_index+1);
+				rx_index = 0;
+				rx_data = 0;
+			}
+			HAL_UART_Receive_IT(&huart2, &rx_data, 1);
+		}
 }
 /* USER CODE END 0 */
 
@@ -252,7 +278,7 @@ int main(void)
   MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
   HAL_UART_Receive_IT(&huart3, &rx_data_lora, 1);
-//  HAL_UART_Receive_IT(&huart2,&rx_data, 1);
+  HAL_UART_Receive_IT(&huart2,&rx_data, 1);
   E220_CONFIG(0x8,0x2A,0x10,1);
   lwgps_init(&gps);
 
@@ -272,7 +298,7 @@ int main(void)
 
 	  if(lora_rx_buffer[3]==2 && lora_rx_buffer[50] == 0x31){
 
-		  sustgpssatsinview=lora_rx_buffer[4];
+		  Sustainer.satsinview=lora_rx_buffer[4];
 
 			 float2unit8 f2u8_gpsalt;
 				 for(uint8_t i=0;i<4;i++)
@@ -280,7 +306,7 @@ int main(void)
 					 f2u8_gpsalt.array[i]=lora_rx_buffer[i+5];
 					 HYI_BUFFER[10+i] =lora_rx_buffer[i+5]; // 10 11 12 13
 				 }
-				 sustgpsaltitude=f2u8_gpsalt.fVal;
+				 Sustainer.gpsaltitude=f2u8_gpsalt.fVal;
 			 float2unit8 f2u8_latitude;
 
 				 for(uint8_t i=0;i<4;i++)
@@ -288,7 +314,7 @@ int main(void)
 					f2u8_latitude.array[i]=lora_rx_buffer[i+9];
 					HYI_BUFFER[14+i] =lora_rx_buffer[i+9]; // 14 15 16 17
 				 }
-				 sustgpslatitude=f2u8_latitude.fVal;
+				 Sustainer.gpslatitude=f2u8_latitude.fVal;
 
 			 float2unit8 f2u8_longitude;
 				 for(uint8_t i=0;i<4;i++)
@@ -296,7 +322,7 @@ int main(void)
 					f2u8_longitude.array[i]=lora_rx_buffer[i+13];
 					HYI_BUFFER[18+i] =lora_rx_buffer[i+13]; // 18 19 20 21
 				 }
-				 sustgpslongitude=f2u8_longitude.fVal;
+				 Sustainer.gpslongitude=f2u8_longitude.fVal;
 
 			 float2unit8 f2u8_altitude;
 				 for(uint8_t i=0;i<4;i++)
@@ -304,7 +330,7 @@ int main(void)
 					f2u8_altitude.array[i]=lora_rx_buffer[i+17];
 					HYI_BUFFER[6+i] =lora_rx_buffer[i+17]; // 6 7 8 9
 				 }
-				 sustaltitude=f2u8_altitude.fVal;
+				 Sustainer.altitude=f2u8_altitude.fVal;
 
 			 float2unit8 f2u8_speed;
 
@@ -312,14 +338,14 @@ int main(void)
 				 {
 					 f2u8_speed.array[i]=lora_rx_buffer[i+21];
 				 }
-				 sustspeed=f2u8_speed.fVal;
+				 Sustainer.speed=f2u8_speed.fVal;
 
 			 float2unit8 f2u8_temp;
 				 for(uint8_t i=0;i<4;i++)
 				 {
 					 f2u8_temp.array[i]=lora_rx_buffer[i+25];
 				 }
-				 susttemperature=f2u8_temp.fVal;
+				 Sustainer.temperature=f2u8_temp.fVal;
 
 			 float2unit8 f2u8_accx;
 				 for(uint8_t i=0;i<4;i++)
@@ -327,7 +353,7 @@ int main(void)
 					 f2u8_accx.array[i]=lora_rx_buffer[i+29];
 					 HYI_BUFFER[58+i]=lora_rx_buffer[i+29]; //
 				 }
-				 sustaccx=f2u8_accx.fVal;
+				 Sustainer.accx=f2u8_accx.fVal;
 
 			float2unit8 f2u8_accy;
 				 for(uint8_t i=0;i<4;i++)
@@ -335,7 +361,7 @@ int main(void)
 					 f2u8_accy.array[i]=lora_rx_buffer[i+33];
 					 HYI_BUFFER[62+i]=lora_rx_buffer[i+33];
 				 }
-					 sustaccy=f2u8_accy.fVal;
+				 Sustainer.accy=f2u8_accy.fVal;
 
 			float2unit8 f2u8_accz;
 			      for(uint8_t i=0;i<4;i++)
@@ -343,25 +369,25 @@ int main(void)
 			    	  f2u8_accz.array[i]=lora_rx_buffer[i+37];
 			    	  HYI_BUFFER[66+i]=lora_rx_buffer[i+37];
 				 }
-					 sustaccz=f2u8_accz.fVal;
+			      Sustainer.accz=f2u8_accz.fVal;
 
 			float2unit8 f2u8_roll;
 				  for(uint8_t i=0;i<4;i++)
 				 {
 					  f2u8_roll.array[i]=lora_rx_buffer[i+41];
 				 }
-					 sustroll=f2u8_roll.fVal;
+				  Sustainer.roll=f2u8_roll.fVal;
 
 			float2unit8 f2u8_pitch;
 				  for(uint8_t i=0;i<4;i++)
 				 {
 					  f2u8_pitch.array[i]=lora_rx_buffer[i+45];
 				 }
-					 sustpitch=f2u8_pitch.fVal;
+				  Sustainer.pitch=f2u8_pitch.fVal;
 
-					 sustv4_battery=lora_rx_buffer[49];
-					 sustv4_mod=lora_rx_buffer[50];
-					 suststage_communication=lora_rx_buffer[51];
+				  Sustainer.battery=lora_rx_buffer[49];
+				  Sustainer.mod=lora_rx_buffer[50];
+				  Sustainer.communication=lora_rx_buffer[51];
 
 					 //EGU PART
 					 EGU_ARIZA=lora_rx_buffer[52];
@@ -397,7 +423,7 @@ int main(void)
 
 	  if(lora_rx_buffer[3]==1 && lora_rx_buffer[50]==0x32){
 
-		  boostgpssatsinview=lora_rx_buffer[4];
+		  Booster.satsinview=lora_rx_buffer[4];
 
 			 float2unit8 f2u8_bgpsalt;
 				 for(uint8_t i=0;i<4;i++)
@@ -405,7 +431,7 @@ int main(void)
 					 f2u8_bgpsalt.array[i]=lora_rx_buffer[i+5];
 					 HYI_BUFFER[34+i]=lora_rx_buffer[i+5]; // 34 35 36 37
 				 }
-				 sustgpsaltitude=f2u8_bgpsalt.fVal;
+				 Booster.gpsaltitude=f2u8_bgpsalt.fVal;
 			 float2unit8 f2u8_blatitude;
 
 				 for(uint8_t i=0;i<4;i++)
@@ -413,7 +439,7 @@ int main(void)
 					 f2u8_blatitude.array[i]=lora_rx_buffer[i+9];
 					 HYI_BUFFER[38+i]=lora_rx_buffer[i+9]; // 38 39 40 41
 				 }
-				 boostgpslatitude=f2u8_blatitude.fVal;
+				 Booster.gpslatitude=f2u8_blatitude.fVal;
 
 			 float2unit8 f2u8_blongitude;
 				 for(uint8_t i=0;i<4;i++)
@@ -421,14 +447,14 @@ int main(void)
 					 f2u8_blongitude.array[i]=lora_rx_buffer[i+13];
 					 HYI_BUFFER[42+i]=lora_rx_buffer[i+13]; // 42 43 44 45
 				 }
-				 boostgpslongitude=f2u8_blongitude.fVal;
+				 Booster.gpslongitude=f2u8_blongitude.fVal;
 
 			 float2unit8 f2u8_baltitude;
 				 for(uint8_t i=0;i<4;i++)
 				 {
 					f2u8_baltitude.array[i]=lora_rx_buffer[i+17];
 				 }
-				 boostaltitude=f2u8_baltitude.fVal;
+				 Booster.altitude=f2u8_baltitude.fVal;
 
 			 float2unit8 f2u8_bspeed;
 
@@ -436,53 +462,53 @@ int main(void)
 				 {
 					 f2u8_bspeed.array[i]=lora_rx_buffer[i+21];
 				 }
-				 boostspeed=f2u8_bspeed.fVal;
+				 Booster.speed=f2u8_bspeed.fVal;
 
 			 float2unit8 f2u8_btemp;
 				 for(uint8_t i=0;i<4;i++)
 				 {
 					 f2u8_btemp.array[i]=lora_rx_buffer[i+25];
 				 }
-				 boosttemperature=f2u8_btemp.fVal;
+				 Booster.temperature=f2u8_btemp.fVal;
 
 			 float2unit8 f2u8_baccx;
 				 for(uint8_t i=0;i<4;i++)
 				 {
 					 f2u8_baccx.array[i]=lora_rx_buffer[i+29];
 				 }
-				 boostaccx=f2u8_baccx.fVal;
+				 Booster.accx=f2u8_baccx.fVal;
 
 			float2unit8 f2u8_baccy;
 				 for(uint8_t i=0;i<4;i++)
 				 {
 					 f2u8_baccy.array[i]=lora_rx_buffer[i+33];
 				 }
-					 boostaccy=f2u8_baccy.fVal;
+				 Booster.accy=f2u8_baccy.fVal;
 
 			float2unit8 f2u8_baccz;
 			      for(uint8_t i=0;i<4;i++)
 				 {
 			    	  f2u8_baccz.array[i]=lora_rx_buffer[i+37];
 				 }
-					 boostaccz=f2u8_baccz.fVal;
+			      Booster.accz=f2u8_baccz.fVal;
 
 			float2unit8 f2u8_broll;
 				  for(uint8_t i=0;i<4;i++)
 				 {
 					  f2u8_broll.array[i]=lora_rx_buffer[i+41];
 				 }
-					 boostroll=f2u8_broll.fVal;
+				  Booster.roll=f2u8_broll.fVal;
 
 			float2unit8 f2u8_bpitch;
 				  for(uint8_t i=0;i<4;i++)
 				 {
 					  f2u8_bpitch.array[i]=lora_rx_buffer[i+45];
 				 }
-					 boostpitch=f2u8_bpitch.fVal;
+				  Booster.pitch=f2u8_bpitch.fVal;
 
-					 boostv4_battery=lora_rx_buffer[49];
-					 boostv4_mod=lora_rx_buffer[50];
-					 booststage_communication=lora_rx_buffer[51];
+				  Booster.battery=lora_rx_buffer[49];
+				  Booster.mod=lora_rx_buffer[50];
+				  Booster.communication=lora_rx_buffer[51];
 
 
 	  	  }
@@ -503,6 +529,59 @@ int main(void)
 
 	  tim1=HAL_GetTick();
 	  }
+
+
+
+	  // EKRANA YAZMA
+     	sprintf(b_altitude,"%4.3f",boostaltitude);
+     	sprintf(b_temperature,"%2.2f",boosttemperature);
+     	sprintf(b_speed,"%2.2f",boostspeed);
+     	sprintf(b_roll,"%2.2f",boostroll);
+     	sprintf(b_pitch,"%2.2f",boostpitch);
+     	sprintf(b_latitude,"%2.2f",boostgpslatitude);
+     	sprintf(b_longitude,"%2.2f",boostgpslongitude);
+
+
+     	sprintf(s_altitude,"%4.3f",sustaltitude);
+     	sprintf(s_temperature,"%2.2f",boosttemperature);
+     	sprintf(s_speed,"%2.2f",sustspeed);
+     	sprintf(s_roll,"%2.2f",sustroll);
+     	sprintf(s_pitch,"%2.2f",sustpitch);
+     	sprintf(s_latitude,"%2.2f",sustgpslatitude);
+     	sprintf(s_longitude,"%2.2f",sustgpslongitude);
+
+        NEXTION_SendString("bs1", b_altitude);
+        NEXTION_SendString("bs2", b_temperature);
+        NEXTION_SendString("bs3", b_speed);
+        NEXTION_SendString("bs4", b_roll);
+        NEXTION_SendString("bs5", b_pitch);
+        NEXTION_SendString("bs6", &boostgpssatsinview);
+        NEXTION_SendString("bs7", b_latitude);
+        NEXTION_SendString("bs8", b_longitude);
+        NEXTION_SendString("bs9", &boostv4_battery);
+        NEXTION_SendString("t56", &booststage_communication);
+
+
+        NEXTION_SendString("s1", s_altitude);
+        NEXTION_SendString("s2", s_temperature);
+        NEXTION_SendString("s3", s_speed);
+        NEXTION_SendString("s4", s_roll);
+        NEXTION_SendString("s5", s_pitch);
+        NEXTION_SendString("s6", &sustgpssatsinview);
+        NEXTION_SendString("s7", s_latitude);
+        NEXTION_SendString("s8", s_longitude);
+        NEXTION_SendString("s9", &sustv4_battery);
+        NEXTION_SendString("t57", &suststage_communication);
+
+        Enum_State_bs();
+        Enum_State_s();
+     //   NEXTION_SendString("t58", &EGU_MOTOR_ATESLEME_TALEP_IN);
+
+
+        NEXTION_SendString("t4", &gps.hours);
+        NEXTION_SendString("t6", &gps.minutes);
+        NEXTION_SendString("t8", &gps.seconds);
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -1050,7 +1129,197 @@ void Payload_union_converter(void)
 			 }
 			  Payload.pitch=f2u8.fVal;
 }
+void Enum_State_bs(void){
 
+    switch(boostv4_mod){
+
+    case 1:
+    	enum_bs[0]='R';
+    	enum_bs[1]='A';
+    	enum_bs[2]='M';
+    	enum_bs[3]='P';
+    	enum_bs[4]='A';
+    	enum_bs[5]='\0';
+    	enum_bs[6]='\0';
+    	enum_bs[7]='\0';
+    	enum_bs[8]='\0';
+    	break;
+
+    case 2:
+    	enum_bs[0]='U';
+    	enum_bs[1]='C';
+    	enum_bs[2]='U';
+    	enum_bs[3]='S';
+    	enum_bs[4]='\0';
+    	enum_bs[5]='\0';
+    	enum_bs[6]='\0';
+    	enum_bs[7]='\0';
+    	enum_s[8]='\0';
+    	break;
+    case 3:
+    	enum_bs[0]='B';
+    	enum_bs[1]='U';
+    	enum_bs[2]='R';
+    	enum_bs[3]='N';
+    	enum_bs[4]='O';
+    	enum_bs[5]='U';
+    	enum_bs[6]='T';
+    	enum_bs[7]='\0';
+    	enum_bs[8]='\0';
+    	break;
+    case 4:
+    	enum_bs[0]='A';
+    	enum_bs[1]='Y';
+    	enum_bs[2]='I';
+    	enum_bs[3]='R';
+    	enum_bs[4]='\0';
+    	enum_bs[5]='\0';
+    	enum_bs[6]='\0';
+    	enum_bs[7]='\0';
+    	enum_bs[8]='\0';
+    	break;
+    case 5:
+    	enum_bs[0]='A';
+    	enum_bs[1]='Y';
+    	enum_bs[2]='R';
+    	enum_bs[3]='I';
+    	enum_bs[4]='L';
+    	enum_bs[5]='D';
+    	enum_bs[6]='I';
+    	enum_bs[7]='?';
+    	enum_bs[8]='\0';
+    	break;
+    case 6:
+    	enum_bs[0]='A';
+    	enum_bs[1]='Y';
+    	enum_bs[2]='R';
+    	enum_bs[3]='I';
+    	enum_bs[4]='L';
+    	enum_bs[5]='D';
+    	enum_bs[6]='I';
+    	enum_bs[7]='\0';
+    	enum_bs[8]='\0';
+    	break;
+    case 7:
+    	enum_bs[0]='A';
+    	enum_bs[1]='Y';
+    	enum_bs[2]='R';
+    	enum_bs[3]='I';
+    	enum_bs[4]='L';
+    	enum_bs[5]='M';
+    	enum_bs[6]='A';
+    	enum_bs[7]='D';
+    	enum_bs[8]='I';
+    	break;
+    case 8:
+    	enum_bs[0]='F';
+    	enum_bs[1]='I';
+    	enum_bs[2]='N';
+    	enum_bs[3]='I';
+    	enum_bs[4]='S';
+    	enum_bs[5]='H';
+    	enum_bs[6]='\0';
+    	enum_bs[7]='\0';
+    	enum_bs[8]='\0';
+    	break;
+
+    	 }
+
+    NEXTION_SendString("bs10", &enum_bs);
+
+
+}
+void Enum_State_s(void){
+
+    switch(sustv4_mod){
+
+    case 1:
+    	enum_s[0]='R';
+    	enum_s[1]='A';
+    	enum_s[2]='M';
+    	enum_s[3]='P';
+    	enum_s[4]='A';
+    	enum_s[5]='\0';
+    	enum_s[6]='\0';
+    	enum_s[7]='\0';
+    	enum_s[8]='\0';
+    	break;
+
+    case 2:
+    	enum_s[0]='U';
+    	enum_s[1]='C';
+    	enum_s[2]='U';
+    	enum_s[3]='S';
+    	enum_s[4]='\0';
+    	enum_s[5]='\0';
+    	enum_s[6]='\0';
+    	enum_s[7]='\0';
+    	enum_s[8]='\0';
+    	break;
+    case 3:
+    	enum_s[0]='A';
+    	enum_s[1]='Y';
+    	enum_s[2]='R';
+    	enum_s[3]='I';
+    	enum_s[4]='L';
+    	enum_s[5]='D';
+    	enum_s[6]='I';
+    	enum_s[7]='?';
+    	enum_s[8]='\0';
+    	break;
+    case 4:
+    	enum_s[0]='A';
+    	enum_s[1]='Y';
+    	enum_s[2]='R';
+    	enum_s[3]='I';
+    	enum_s[4]='L';
+    	enum_s[5]='D';
+    	enum_s[6]='I';
+    	enum_s[7]='\0';
+    	enum_s[8]='\0';
+    	break;
+    case 5:
+    	enum_s[0]='A';
+    	enum_s[1]='P';
+    	enum_s[2]='O';
+    	enum_s[3]='G';
+    	enum_s[4]='E';
+    	enum_s[5]='E';
+    	enum_s[6]='\0';
+    	enum_s[7]='\0';
+    	enum_s[8]='\0';
+    	break;
+    case 6:
+    	enum_s[0]='M';
+    	enum_s[1]='A';
+    	enum_s[2]='I';
+    	enum_s[3]='N';
+    	enum_s[4]='\0';
+    	enum_s[5]='\0';
+    	enum_s[6]='\0';
+    	enum_s[7]='\0';
+    	enum_s[8]='\0';
+    	break;
+    case 7:
+    	enum_s[0]='F';
+    	enum_s[1]='I';
+    	enum_s[2]='N';
+    	enum_s[3]='I';
+    	enum_s[4]='S';
+    	enum_s[5]='H';
+    	enum_s[6]='\0';
+    	enum_s[7]='\0';
+    	enum_s[8]='\0';
+    	break;
+
+
+
+    	 }
+
+    NEXTION_SendString("s10", &enum_s);
+
+
+}
 /* USER CODE END 4 */
 
 /**
