@@ -91,7 +91,7 @@ float sustaccy=0;
 float sustaccz=0;
 float sustroll=0;
 float sustpitch=0;
-uint8_t sustv4_battery=0;
+char sustv4_battery=0;
 uint8_t sustv4_mod=0;
 uint8_t suststage_communication=0;
 
@@ -138,7 +138,7 @@ typedef struct
 	float accz;
 	float normal;
 	float pitch;
-	uint8_t battery;
+	float battery;
 	uint8_t mod;
 	uint8_t communication;
 
@@ -166,6 +166,8 @@ uint8_t s_roll[5];
 uint8_t s_pitch[5];
 uint8_t s_latitude[6];
 uint8_t s_longitude[6];
+uint8_t susbattary[2];
+uint8_t suscom[2];
 
 ///////////////////////////////////////////////////
 uint32_t tim1=0;
@@ -248,6 +250,7 @@ HAL_UART_Receive_IT(&huart3, &rx_data_lora, 1);
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -551,6 +554,9 @@ int main(void)
      	sprintf(s_pitch,"%2.2f",Sustainer.pitch);
      	sprintf(s_latitude,"%2.2f",Sustainer.gpslatitude);
      	sprintf(s_longitude,"%2.2f",Sustainer.gpslongitude);
+     	sprintf(susbattary,"%2.0f",Sustainer.battery);
+    	sprintf(suscom,"%1.0f",Sustainer.communication);
+
 
 
         NEXTION_SendString("bs1", b_altitude);
@@ -561,8 +567,8 @@ int main(void)
         NEXTION_SendString("bs6", &boostgpssatsinview);
         NEXTION_SendString("bs7", b_latitude);
         NEXTION_SendString("bs8", b_longitude);
-        NEXTION_SendString("bs9", &boostv4_battery);
-        NEXTION_SendString("t56", &booststage_communication);
+      //  NEXTION_SendString("bs9", &Booster.battery);
+        NEXTION_SendString("t56", &Booster.communication);
 
        // Nextion_SendFloatToTextbox("s1", Sustainer.altitude);
         NEXTION_SendString("s1", s_altitude);
@@ -573,8 +579,8 @@ int main(void)
         NEXTION_SendString("s6", &sustgpssatsinview);
         NEXTION_SendString("s7", s_latitude);
         NEXTION_SendString("s8", s_longitude);
-        NEXTION_SendString("s9", &sustv4_battery);
-        NEXTION_SendString("t57", &suststage_communication);
+        NEXTION_SendString("s9", susbattary);
+        NEXTION_SendString("t57", suscom);
 
         Enum_State_bs();
         Enum_State_s();
@@ -778,7 +784,7 @@ static void MX_UART4_Init(void)
 
   /* USER CODE END UART4_Init 1 */
   huart4.Instance = UART4;
-  huart4.Init.BaudRate = 115200;
+  huart4.Init.BaudRate = 9600;
   huart4.Init.WordLength = UART_WORDLENGTH_8B;
   huart4.Init.StopBits = UART_STOPBITS_1;
   huart4.Init.Parity = UART_PARITY_NONE;
