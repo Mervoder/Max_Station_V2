@@ -136,7 +136,7 @@ typedef struct
 	float accx;
 	float accy;
 	float accz;
-	float roll;
+	float normal;
 	float pitch;
 	uint8_t battery;
 	uint8_t mod;
@@ -159,7 +159,7 @@ uint8_t b_longitude[6];
 uint8_t enum_bs[9];
 uint8_t enum_s[9];
 
-uint8_t s_altitude[8];
+char s_altitude[8];
 uint8_t s_temperature[5];
 uint8_t s_speed[5];
 uint8_t s_roll[5];
@@ -208,6 +208,8 @@ void HYI_BUFFER_Fill(void);
 void Payload_union_converter(void);
 void Enum_State_bs(void);
 void Enum_State_s(void);
+void Nextion_SendCommand(char* command);
+void Nextion_SendFloatToTextbox(char* textbox_id, float value);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -290,7 +292,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
+	 // HAL_UART_Receive(&huart2, lora_rx_buffer, 70 , 1000);
 
 	  if(HAL_GetTick()-tim1>10)
 {
@@ -376,7 +378,7 @@ int main(void)
 				 {
 					  f2u8_roll.array[i]=lora_rx_buffer[i+41];
 				 }
-				  Sustainer.roll=f2u8_roll.fVal;
+				  Sustainer.normal=f2u8_roll.fVal;
 
 			float2unit8 f2u8_pitch;
 				  for(uint8_t i=0;i<4;i++)
@@ -497,7 +499,7 @@ int main(void)
 				 {
 					  f2u8_broll.array[i]=lora_rx_buffer[i+41];
 				 }
-				  Booster.roll=f2u8_broll.fVal;
+				  Booster.normal=f2u8_broll.fVal;
 
 			float2unit8 f2u8_bpitch;
 				  for(uint8_t i=0;i<4;i++)
@@ -533,22 +535,23 @@ int main(void)
 
 
 	  // EKRANA YAZMA
-     	sprintf(b_altitude,"%4.3f",boostaltitude);
-     	sprintf(b_temperature,"%2.2f",boosttemperature);
-     	sprintf(b_speed,"%2.2f",boostspeed);
-     	sprintf(b_roll,"%2.2f",boostroll);
-     	sprintf(b_pitch,"%2.2f",boostpitch);
-     	sprintf(b_latitude,"%2.2f",boostgpslatitude);
-     	sprintf(b_longitude,"%2.2f",boostgpslongitude);
+     	sprintf(b_altitude,"%4.3f",Booster.altitude);
+     	sprintf(b_temperature,"%2.2f",Booster.temperature);
+     	sprintf(b_speed,"%2.2f",Booster.speed);
+     	sprintf(b_roll,"%2.2f",Booster.normal);
+     	sprintf(b_pitch,"%2.2f",Booster.pitch);
+     	sprintf(b_latitude,"%2.2f",Booster.gpslatitude);
+     	sprintf(b_longitude,"%2.2f",Booster.gpslongitude);
 
 
-     	sprintf(s_altitude,"%4.3f",sustaltitude);
-     	sprintf(s_temperature,"%2.2f",boosttemperature);
-     	sprintf(s_speed,"%2.2f",sustspeed);
-     	sprintf(s_roll,"%2.2f",sustroll);
-     	sprintf(s_pitch,"%2.2f",sustpitch);
-     	sprintf(s_latitude,"%2.2f",sustgpslatitude);
-     	sprintf(s_longitude,"%2.2f",sustgpslongitude);
+     	sprintf(s_altitude,"%4.3f",Sustainer.altitude);
+     	sprintf(s_temperature,"%2.2f",Sustainer.temperature);
+     	sprintf(s_speed,"%2.2f",Sustainer.speed);
+     	sprintf(s_roll,"%2.2f",Sustainer.normal);
+     	sprintf(s_pitch,"%2.2f",Sustainer.pitch);
+     	sprintf(s_latitude,"%2.2f",Sustainer.gpslatitude);
+     	sprintf(s_longitude,"%2.2f",Sustainer.gpslongitude);
+
 
         NEXTION_SendString("bs1", b_altitude);
         NEXTION_SendString("bs2", b_temperature);
@@ -561,7 +564,7 @@ int main(void)
         NEXTION_SendString("bs9", &boostv4_battery);
         NEXTION_SendString("t56", &booststage_communication);
 
-
+       // Nextion_SendFloatToTextbox("s1", Sustainer.altitude);
         NEXTION_SendString("s1", s_altitude);
         NEXTION_SendString("s2", s_temperature);
         NEXTION_SendString("s3", s_speed);
@@ -1034,6 +1037,27 @@ void NEXTION_SendFloat (char *obj, float num, int dp)
 	free(buffer);
 }
 
+void Nextion_SendCommand(char* command) {
+    HAL_UART_Transmit(&huart4, (uint8_t*)command, strlen(command), 100);
+    uint8_t end_cmd[] = {0xFF, 0xFF, 0xFF}; // Nextion end of command
+    HAL_UART_Transmit(&huart4, end_cmd, 3, 100);
+}
+
+// Function to send a float value to a Nextion text box
+void Nextion_SendFloatToTextbox(char* textbox_id, float value) {
+    char command[50];
+    char value_str[20];
+
+    // Convert the float to a string
+    snprintf(value_str, sizeof(value_str), "%.2f", value); // Adjust the format as needed
+
+    // Format the command
+    snprintf(command, sizeof(command), "%s.txt=\"%s\"", textbox_id, value_str);
+
+    // Send the command to the Nextion display
+    Nextion_SendCommand(command);
+}
+
 void HYI_BUFFER_Fill()
 {
 	HYI_BUFFER[0] =0xFF;
@@ -1120,7 +1144,7 @@ void Payload_union_converter(void)
 			 {
 				  f2u8.array[i]=lora_rx_buffer[i+41];
 			 }
-			  Payload.roll=f2u8.fVal;
+			  Payload.normal=f2u8.fVal;
 
 
 			  for(uint8_t i=0;i<4;i++)
