@@ -1,6 +1,6 @@
 ################################################################################
 # Automatically-generated file. Do not edit!
-# Toolchain: GNU Tools for STM32 (11.3.rel1)
+# Toolchain: GNU Tools for STM32 (12.3.rel1)
 ################################################################################
 
 -include ../makefile.init
@@ -68,8 +68,8 @@ all: main-build
 main-build: max-station.elf secondary-outputs
 
 # Tool invocations
-max-station.elf max-station.map: $(OBJS) $(USER_OBJS) C:\Users\memin\STM32CubeIDE\workspace_1.11.0\max-station\STM32F446RCTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "max-station.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\memin\STM32CubeIDE\workspace_1.11.0\max-station\STM32F446RCTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="max-station.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+max-station.elf max-station.map: $(OBJS) $(USER_OBJS) C:\Users\oguzk\STM32CubeIDE\workspace_1.15.1\max-station\STM32F446RCTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "max-station.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\oguzk\STM32CubeIDE\workspace_1.15.1\max-station\STM32F446RCTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="max-station.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -u _printf_float -u _scanf_float -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
