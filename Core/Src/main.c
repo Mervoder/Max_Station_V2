@@ -37,11 +37,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define LORA_RX_BUFFER_SIZE 70
+#define LORA_RX_BUFFER_SIZE 75
 #define RX_BUFFER_SIZE 128
-#define HYI_BUFFER_SIZE 77
+#define HYI_BUFFER_SIZE 78
 
-#define TAKIM_ID 0
+#define TAKIM_ID 31
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -100,6 +100,8 @@ uint8_t sustv4_battery=0;
 uint8_t sustv4_mod=0;
 uint8_t suststage_communication=0;
 
+float s_distance=0;
+
 //egu
 uint8_t EGU_ARIZA=0;
 uint8_t EGU_AYRILMA_TESPIT=0;
@@ -129,6 +131,9 @@ float boostpitch=0;
 uint8_t boostv4_battery=0;
 uint8_t boostv4_mod=0;
 uint8_t booststage_communication=0;
+
+
+float bs_distance=0;
 
 typedef struct
 {	uint8_t satsinview;
@@ -163,7 +168,7 @@ uint8_t b_longitude[9];
 uint8_t b_bat[2];
 uint8_t b_sats[2];
 uint8_t b_comm[2];
-
+uint8_t b_dist[6];
 
 uint8_t enum_bs[9];
 uint8_t enum_s[9];
@@ -178,6 +183,7 @@ uint8_t s_longitude[9];
 uint8_t s_bat[2];
 uint8_t s_sats[2];
 uint8_t s_comm[2];
+uint8_t s_dist[6];
 
 ///////////////////////////////////////////////////
 uint8_t seconds[2];
@@ -216,7 +222,8 @@ uint8_t BUTTON_STATE=0;
 uint8_t writeData[50] = {0,1,1,1};
 uint8_t readData[50] = {0};
 
-
+uint32_t crc;
+uint8_t chs;
 lwgps_t gps;
 
 typedef union{
@@ -266,7 +273,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 		rx_index_lora=0;
 
 		}
-HAL_UART_Receive_IT(&huart3, &rx_data_lora, 1);
+	  HAL_UART_Receive_IT(&huart3, &rx_data_lora, 1);
 	}
 
 	if(huart == &huart2) {
@@ -340,9 +347,9 @@ int main(void)
   MX_UART4_Init();
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
-  MX_USB_DEVICE_Init();
   MX_FATFS_Init();
   MX_TIM11_Init();
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
   HAL_UART_Receive_IT(&huart3, &rx_data_lora, 1);
   HAL_UART_Receive_IT(&huart2,&rx_data, 1);
@@ -359,10 +366,9 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  HAL_UART_Receive(&huart4, nextion_rx_data, 5 , 1000);
+	//  HAL_UART_Receive(&huart4, nextion_rx_data, 5 , 1000);
 
-	  if(HAL_GetTick()-tim1>10)
-{
+
 		  HYI_BUFFER_Fill();
 
 	  if(lora_rx_buffer[3]==2 && lora_rx_buffer[50] == 0x31){
@@ -420,7 +426,7 @@ int main(void)
 				 for(uint8_t i=0;i<4;i++)
 				 {
 					 f2u8_accx.array[i]=lora_rx_buffer[i+29];
-					 HYI_BUFFER[58+i]=lora_rx_buffer[i+29]; //
+					// HYI_BUFFER[58+i]=lora_rx_buffer[i+29]; //
 				 }
 				 Sustainer.accx=f2u8_accx.fVal;
 
@@ -428,7 +434,7 @@ int main(void)
 				 for(uint8_t i=0;i<4;i++)
 				 {
 					 f2u8_accy.array[i]=lora_rx_buffer[i+33];
-					 HYI_BUFFER[62+i]=lora_rx_buffer[i+33];
+					 //HYI_BUFFER[62+i]=lora_rx_buffer[i+33];
 				 }
 				 Sustainer.accy=f2u8_accy.fVal;
 
@@ -436,7 +442,7 @@ int main(void)
 			      for(uint8_t i=0;i<4;i++)
 				 {
 			    	  f2u8_accz.array[i]=lora_rx_buffer[i+37];
-			    	  HYI_BUFFER[66+i]=lora_rx_buffer[i+37];
+			    	//  HYI_BUFFER[66+i]=lora_rx_buffer[i+37];
 				 }
 			      Sustainer.accz=f2u8_accz.fVal;
 
@@ -484,13 +490,12 @@ int main(void)
 					  EGU_IRTIFA=f2u8_EGU_IRTIFA.fVal;
 
 					  EGU_FITIL=lora_rx_buffer[53];
-
-					  EGU_UCUS_BASLADIMI=lora_rx_buffer[66];
+	/*  EGU_UCUS_BASLADIMI*/sustv4_mod=lora_rx_buffer[66];
 					  EGU_STAGE_DURUM=lora_rx_buffer[67];
 					  EGU_MOTOR_ATESLEME_TALEP_IN=lora_rx_buffer[68];
 }
 
-	  if(lora_rx_buffer[3]==1 && lora_rx_buffer[50]==0x32){
+	  else if(lora_rx_buffer[3]==1 && lora_rx_buffer[50]==0x32){
 
 		  Booster.satsinview=lora_rx_buffer[4];
 
@@ -582,7 +587,7 @@ int main(void)
 
 	  	  }
 
-		  if(lora_rx_buffer[3]==3 && lora_rx_buffer[50]==0x33)
+	     else if(lora_rx_buffer[3]==3 && lora_rx_buffer[50]==0x33)
 		  {
 
 		  Payload.satsinview=lora_rx_buffer[4];
@@ -596,10 +601,10 @@ int main(void)
 		  }
 
 
-	  tim1=HAL_GetTick();
-	  }
 
 
+	  s_distance=distance_in_m(gps.latitude,gps.longitude,sustgpslatitude,sustgpslongitude);
+	  bs_distance=distance_in_m(gps.latitude,gps.longitude,boostgpslatitude,boostgpslongitude);
 
 	  // EKRANA YAZMA
      	sprintf(b_altitude,"%4.3f",Booster.altitude);
@@ -612,7 +617,7 @@ int main(void)
      	sprintf(b_bat,"%2d",Booster.battery);
      	sprintf(b_sats,"%2d",Booster.satsinview);
        	sprintf(b_comm,"%2d",Booster.communication);
-
+       	sprintf(b_dist,"%4.2f",bs_distance);
 
      	sprintf(s_altitude,"%4.3f",Sustainer.altitude);
      	sprintf(s_temperature,"%2.2f",Sustainer.temperature);
@@ -624,6 +629,9 @@ int main(void)
     	sprintf(s_bat,"%2d",Sustainer.battery);
     	sprintf(s_sats,"%2d",Sustainer.satsinview);
     	sprintf(s_comm,"%2d",Sustainer.communication);
+       	sprintf(s_comm,"%2d",Sustainer.communication);
+       	sprintf(s_dist,"%4.2f",s_distance);
+
 
     	sprintf(st_bat,"%2d",(uint8_t)adc_pil_val);
     	NEXTION_SendString("t54", st_bat);
@@ -638,6 +646,7 @@ int main(void)
         NEXTION_SendString("bs8", b_longitude);
         NEXTION_SendString("bs9", b_bat);
         NEXTION_SendString("t56", b_comm);
+        NEXTION_SendString("t17", b_dist);
 
        // Nextion_SendFloatToTextbox("s1", Sustainer.altitude);
         NEXTION_SendString("s1", s_altitude);
@@ -650,6 +659,7 @@ int main(void)
         NEXTION_SendString("s8", s_longitude);
         NEXTION_SendString("s9", s_bat);
         NEXTION_SendString("t57", s_comm);
+        NEXTION_SendString("t", s_dist);
 
         Enum_State_bs();
         Enum_State_s();
@@ -735,16 +745,31 @@ int main(void)
         NEXTION_SendString("m7", e_engine_request);
         NEXTION_SendString("t59", e_fitil);
 
+    	for(uint8_t i=4;i<75;i++)
+    	{
+    		crc+=HYI_BUFFER[i];
+    		chs=crc % 256;
 
 
-if(nextion_rx_data[0]=='A'){
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4,GPIO_PIN_SET);
-	HAL_Delay(2000);
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4,GPIO_PIN_RESET);
-	test_index++;
+    	}
+         HYI_BUFFER[75]= chs; // CRC
+     	 CDC_Transmit_FS(HYI_BUFFER,HYI_BUFFER_SIZE);
+     	 crc=0;
+          // CDC_Transmit_FS("LLLL",4);
 
 
-}
+
+
+
+
+//if(nextion_rx_data[0]=='A'){
+//	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4,GPIO_PIN_SET);
+//	HAL_Delay(2000);
+//	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4,GPIO_PIN_RESET);
+//	test_index++;
+//
+//
+//}
 
 if(adc_flag ==1)
 	  {
@@ -1265,14 +1290,83 @@ void HYI_BUFFER_Fill()
 {
 	HYI_BUFFER[0] =0xFF;
 	HYI_BUFFER[1] =0xFF;
-	HYI_BUFFER[3] =0x54;
+	HYI_BUFFER[2] =0x54;
+	HYI_BUFFER[3] =0X52;
 	HYI_BUFFER[4] =TAKIM_ID;
-	HYI_BUFFER[5] =takim_sayac;
-	HYI_BUFFER[74]= EGU_AYRILMA_TESPIT;
-	HYI_BUFFER[75]= 0; // CRC
+//	HYI_BUFFER[6] =takim_sayac;
+//	HYI_BUFFER[7] =takim_sayac;
+//	HYI_BUFFER[8] =takim_sayac;
+//	HYI_BUFFER[9] =takim_sayac;
+//	HYI_BUFFER[10] =takim_sayac;
+//	HYI_BUFFER[11] =takim_sayac;
+//	HYI_BUFFER[12] =takim_sayac;
+//	HYI_BUFFER[13] =takim_sayac;
+//	HYI_BUFFER[14] =takim_sayac;
+//	HYI_BUFFER[15] =takim_sayac;
+//	HYI_BUFFER[16] =takim_sayac;
+//	HYI_BUFFER[17] =takim_sayac;
+//	HYI_BUFFER[18] =takim_sayac;
+//	HYI_BUFFER[19] =takim_sayac;
+//	HYI_BUFFER[20] =takim_sayac;
+//	HYI_BUFFER[21] =takim_sayac;
+//	HYI_BUFFER[22] =takim_sayac;
+//	HYI_BUFFER[23] =takim_sayac;
+//	HYI_BUFFER[24] =takim_sayac;
+//	HYI_BUFFER[25] =takim_sayac;
+//	HYI_BUFFER[26] =takim_sayac;
+//	HYI_BUFFER[27] =takim_sayac;
+//	HYI_BUFFER[28] =takim_sayac;
+//	HYI_BUFFER[29] =takim_sayac;
+//	HYI_BUFFER[30] =takim_sayac;
+//	HYI_BUFFER[31] =takim_sayac;
+//	HYI_BUFFER[32] =takim_sayac;
+//	HYI_BUFFER[33] =takim_sayac;
+//	HYI_BUFFER[34] =takim_sayac;
+//	HYI_BUFFER[35] =takim_sayac;
+//	HYI_BUFFER[36] =takim_sayac;
+//	HYI_BUFFER[37] =takim_sayac;
+//	HYI_BUFFER[38] =takim_sayac;
+//	HYI_BUFFER[39] =takim_sayac;
+//	HYI_BUFFER[40] =takim_sayac;
+//	HYI_BUFFER[41] =takim_sayac;
+//	HYI_BUFFER[42] =takim_sayac;
+//	HYI_BUFFER[43] =takim_sayac;
+//	HYI_BUFFER[44] =takim_sayac;
+//	HYI_BUFFER[45] =takim_sayac;
+//	HYI_BUFFER[46] =takim_sayac;
+//	HYI_BUFFER[47] =takim_sayac;
+//	HYI_BUFFER[48] =takim_sayac;
+//	HYI_BUFFER[49] =takim_sayac;
+//	HYI_BUFFER[50] =takim_sayac;
+//	HYI_BUFFER[51] =takim_sayac;
+//	HYI_BUFFER[52] =takim_sayac;
+//	HYI_BUFFER[53] =takim_sayac;
+//	HYI_BUFFER[54] =takim_sayac;
+//	HYI_BUFFER[55] =takim_sayac;
+//	HYI_BUFFER[56] =takim_sayac;
+//	HYI_BUFFER[57] =takim_sayac;
+//	HYI_BUFFER[58] =takim_sayac;
+//	HYI_BUFFER[59] =takim_sayac;
+//	HYI_BUFFER[60] =takim_sayac;
+//	HYI_BUFFER[61] =takim_sayac;
+//	HYI_BUFFER[62] =takim_sayac;
+//	HYI_BUFFER[63] =takim_sayac;
+//	HYI_BUFFER[64] =takim_sayac;
+//	HYI_BUFFER[65] =takim_sayac;
+//	HYI_BUFFER[66] =takim_sayac;
+//	HYI_BUFFER[67] =takim_sayac;
+//	HYI_BUFFER[68] =takim_sayac;
+//	HYI_BUFFER[69] =takim_sayac;
+//	HYI_BUFFER[70] =takim_sayac;
+//	HYI_BUFFER[71] =takim_sayac;
+//	HYI_BUFFER[72] =takim_sayac;
+//	HYI_BUFFER[73] =takim_sayac;
+
+
+	HYI_BUFFER[74]= 1;//EGU_AYRILMA_TESPIT;
+	//HYI_BUFFER[75]= crc; // CRC
 	HYI_BUFFER[76]= 0x0D;
 	HYI_BUFFER[77]= 0x0A;
-
 
 
 }
@@ -1282,7 +1376,7 @@ void Payload_union_converter(void)
 			 for(uint8_t i=0;i<4;i++)
 			 {
 				 f2u8.array[i]=lora_rx_buffer[i+5];
-				 HYI_BUFFER[34+i]=lora_rx_buffer[i+5]; // 34 35 36 37
+				 HYI_BUFFER[22+i]=lora_rx_buffer[i+5]; // 34 35 36 37
 			 }
 			 Payload.gpsaltitude=f2u8.fVal;
 
@@ -1290,14 +1384,14 @@ void Payload_union_converter(void)
 			 for(uint8_t i=0;i<4;i++)
 			 {
 				 f2u8.array[i]=lora_rx_buffer[i+9];
-				 HYI_BUFFER[38+i]=lora_rx_buffer[i+9]; // 38 39 40 41
+				 HYI_BUFFER[26+i]=lora_rx_buffer[i+9]; // 38 39 40 41
 			 }
 			 Payload.gpslatitude=f2u8.fVal;
 
 			 for(uint8_t i=0;i<4;i++)
 			 {
 				 f2u8.array[i]=lora_rx_buffer[i+13];
-				 HYI_BUFFER[42+i]=lora_rx_buffer[i+13]; // 42 43 44 45
+				 HYI_BUFFER[30+i]=lora_rx_buffer[i+13]; // 42 43 44 45
 			 }
 			 Payload.gpslongitude=f2u8.fVal;
 
