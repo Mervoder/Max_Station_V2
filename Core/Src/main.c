@@ -61,9 +61,13 @@ TIM_HandleTypeDef htim11;
 UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
+UART_HandleTypeDef huart6;
+DMA_HandleTypeDef hdma_usart3_rx;
+DMA_HandleTypeDef hdma_usart6_rx;
 
 /* USER CODE BEGIN PV */
 uint8_t lora_rx_buffer[LORA_RX_BUFFER_SIZE];
+uint8_t RS_rx_buffer[LORA_RX_BUFFER_SIZE];
 uint8_t rx_index_lora=0;
 uint8_t rx_data_lora=0;
 
@@ -233,11 +237,15 @@ typedef union{
   unsigned char array[4];
 }float2unit8;
 
+float2unit8 f2u8_booster;
+int counthalf=0,countfull=0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
@@ -245,6 +253,7 @@ static void MX_UART4_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_TIM11_Init(void);
+static void MX_USART6_UART_Init(void);
 /* USER CODE BEGIN PFP */
 void E220_CONFIG(uint8_t ADDH, uint8_t ADDL, uint8_t CHN, uint8_t MODE);
 double distance_in_m(double lat1, double long1, double lat2, double long2);
@@ -255,6 +264,9 @@ void NEXTION_SendNum (char *obj, int32_t num);
 void NEXTION_SendFloat (char *obj, float num, int dp);
 void HYI_BUFFER_Fill(void);
 void Payload_union_converter(void);
+void Booster_union_converter(void);
+void Sustainer_union_converter(void);
+void Screen_Update(void);
 void Enum_State_bs(void);
 void Enum_State_s(void);
 void Nextion_SendCommand(char* command);
@@ -263,11 +275,16 @@ void Nextion_SendFloatToTextbox(char* textbox_id, float value);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+//void HAL_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart)
+//{
+//	counthalf++;
+//}
+
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	if(huart == &huart3){
+	if(huart == &huart6){ // RS232 Alım
 	if(rx_data_lora != '\n'&& rx_index_lora < LORA_RX_BUFFER_SIZE){
-	lora_rx_buffer[rx_index_lora++]=rx_data_lora;
+		RS_rx_buffer[rx_index_lora++]=rx_data_lora;
 
 	}
 	else{
@@ -275,8 +292,14 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 		rx_index_lora=0;
 
 		}
-	  HAL_UART_Receive_IT(&huart3, &rx_data_lora, 1);
+	HAL_UART_Receive_IT(&huart6, &rx_data_lora, 1);
 	}
+//
+	if(huart == &huart3){ // Lora alım
+
+		HAL_UART_Receive_DMA(&huart3, lora_rx_buffer, 75);
+	}
+
 
 	if(huart == &huart2) {
 			if( rx_data != '\n'&& rx_index < RX_BUFFER_SIZE) {
@@ -328,7 +351,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+   HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -343,6 +366,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_ADC1_Init();
   MX_I2C1_Init();
   MX_SPI1_Init();
@@ -352,10 +376,15 @@ int main(void)
   MX_FATFS_Init();
   MX_TIM11_Init();
   MX_USB_DEVICE_Init();
+  MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
-  HAL_UART_Receive_IT(&huart3, &rx_data_lora, 1);
+
+
+ // HAL_UART_Receive_IT(&huart3, &rx_data_lora, 1);
+  HAL_UART_Receive_DMA(&huart3, lora_rx_buffer, 75);
+  HAL_UART_Receive_IT(&huart6, &rx_data_lora, 1);
   HAL_UART_Receive_IT(&huart2,&rx_data, 1);
-  E220_CONFIG(0x8,0x2A,0x10,1);
+  E220_CONFIG(0x8,0x2A,0x10,1); //0x8,0x2A,0x10,1
   lwgps_init(&gps);
 
   HAL_ADC_Start_IT(&hadc1);
@@ -368,7 +397,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	//  HAL_UART_Receive(&huart4, nextion_rx_data, 5 , 1000);
 
 
 		  HYI_BUFFER_Fill();
@@ -377,328 +405,85 @@ int main(void)
 
 		  Sustainer.satsinview=lora_rx_buffer[4];
 
-			 float2unit8 f2u8_gpsalt;
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					 f2u8_gpsalt.array[i]=lora_rx_buffer[i+5];
-					 HYI_BUFFER[10+i] =lora_rx_buffer[i+5]; // 10 11 12 13
-				 }
-				 Sustainer.gpsaltitude=f2u8_gpsalt.fVal;
-			 float2unit8 f2u8_latitude;
+		  Sustainer_union_converter();
+		  Sustainer.battery=lora_rx_buffer[49];
+		  Sustainer.mod=lora_rx_buffer[73];
+		  Sustainer.communication=lora_rx_buffer[51];
 
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					f2u8_latitude.array[i]=lora_rx_buffer[i+9];
-					HYI_BUFFER[14+i] =lora_rx_buffer[i+9]; // 14 15 16 17
-				 }
-				 Sustainer.gpslatitude=f2u8_latitude.fVal;
+			 //EGU PART
+			 EGU_ARIZA=lora_rx_buffer[52];
+			 EGU_AYRILMA_TESPIT=lora_rx_buffer[53];
 
-			 float2unit8 f2u8_longitude;
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					f2u8_longitude.array[i]=lora_rx_buffer[i+13];
-					HYI_BUFFER[18+i] =lora_rx_buffer[i+13]; // 18 19 20 21
-				 }
-				 Sustainer.gpslongitude=f2u8_longitude.fVal;
+			 float2unit8 f2u8_EGU_BATTERY;
+			for(uint8_t i=0;i<4;i++)
+			{
+				f2u8_EGU_BATTERY.array[i]=lora_rx_buffer[i+54];
+			}
+			 EGU_BATTERY=f2u8_EGU_BATTERY.fVal;
 
-			 float2unit8 f2u8_altitude;
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					f2u8_altitude.array[i]=lora_rx_buffer[i+17];
-					HYI_BUFFER[6+i] =lora_rx_buffer[i+17]; // 6 7 8 9
-				 }
-				 Sustainer.altitude=f2u8_altitude.fVal;
+			 float2unit8 f2u8_EGU_ANGLE;
+			for(uint8_t i=0;i<4;i++)
+			{
+				f2u8_EGU_ANGLE.array[i]=lora_rx_buffer[i+58];
+			}
+			  EGU_ANGLE=f2u8_EGU_ANGLE.fVal;
 
-			 float2unit8 f2u8_speed;
+			  float2unit8 f2u8_EGU_IRTIFA;
+			for(uint8_t i=0;i<4;i++)
+			{
+				f2u8_EGU_IRTIFA.array[i]=lora_rx_buffer[i+62];
+			}
+		  EGU_IRTIFA=f2u8_EGU_IRTIFA.fVal;
 
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					 f2u8_speed.array[i]=lora_rx_buffer[i+21];
-				 }
-				 Sustainer.speed=f2u8_speed.fVal;
-
-			 float2unit8 f2u8_temp;
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					 f2u8_temp.array[i]=lora_rx_buffer[i+25];
-				 }
-				 Sustainer.temperature=f2u8_temp.fVal;
-
-			 float2unit8 f2u8_accx;
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					 f2u8_accx.array[i]=lora_rx_buffer[i+29];
-					// HYI_BUFFER[58+i]=lora_rx_buffer[i+29]; //
-				 }
-				 Sustainer.accx=f2u8_accx.fVal;
-
-			float2unit8 f2u8_accy;
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					 f2u8_accy.array[i]=lora_rx_buffer[i+33];
-					 //HYI_BUFFER[62+i]=lora_rx_buffer[i+33];
-				 }
-				 Sustainer.accy=f2u8_accy.fVal;
-
-			float2unit8 f2u8_accz;
-			      for(uint8_t i=0;i<4;i++)
-				 {
-			    	  f2u8_accz.array[i]=lora_rx_buffer[i+37];
-			    	//  HYI_BUFFER[66+i]=lora_rx_buffer[i+37];
-				 }
-			      Sustainer.accz=f2u8_accz.fVal;
-
-			float2unit8 f2u8_roll;
-				  for(uint8_t i=0;i<4;i++)
-				 {
-					  f2u8_roll.array[i]=lora_rx_buffer[i+41];
-				 }
-				  Sustainer.normal=f2u8_roll.fVal;
-
-			float2unit8 f2u8_pitch;
-				  for(uint8_t i=0;i<4;i++)
-				 {
-					  f2u8_pitch.array[i]=lora_rx_buffer[i+45];
-				 }
-				  Sustainer.pitch=f2u8_pitch.fVal;
-
-				  Sustainer.battery=lora_rx_buffer[49];
-				  Sustainer.mod=lora_rx_buffer[73];
-				  Sustainer.communication=lora_rx_buffer[51];
-
-					 //EGU PART
-					 EGU_ARIZA=lora_rx_buffer[52];
-					 EGU_AYRILMA_TESPIT=lora_rx_buffer[53];
-
-			float2unit8 f2u8_EGU_BATTERY;
-					for(uint8_t i=0;i<4;i++)
-				 {
-						f2u8_EGU_BATTERY.array[i]=lora_rx_buffer[i+54];
-				 }
-					 EGU_BATTERY=f2u8_EGU_BATTERY.fVal;
-
-			float2unit8 f2u8_EGU_ANGLE;
-					for(uint8_t i=0;i<4;i++)
-				{
-						f2u8_EGU_ANGLE.array[i]=lora_rx_buffer[i+58];
-				 }
-					  EGU_ANGLE=f2u8_EGU_ANGLE.fVal;
-
-			float2unit8 f2u8_EGU_IRTIFA;
-					for(uint8_t i=0;i<4;i++)
-				{
-						f2u8_EGU_IRTIFA.array[i]=lora_rx_buffer[i+62];
-				}
-					  EGU_IRTIFA=f2u8_EGU_IRTIFA.fVal;
-
-					  EGU_FITIL=lora_rx_buffer[53];
+		  EGU_FITIL=lora_rx_buffer[53];
 	/*  EGU_UCUS_BASLADIMI*/sustv4_mod=lora_rx_buffer[66];
-					  EGU_STAGE_DURUM=lora_rx_buffer[67];
-					  EGU_MOTOR_ATESLEME_TALEP_IN=lora_rx_buffer[68];
+		  EGU_STAGE_DURUM=lora_rx_buffer[67];
+		  EGU_MOTOR_ATESLEME_TALEP_IN=lora_rx_buffer[68];
 
-					  f2u8_altitude.array[0] = lora_rx_buffer[69];
-					  f2u8_altitude.array[1] = lora_rx_buffer[70];
-					  f2u8_altitude.array[2] = lora_rx_buffer[71];
-					  f2u8_altitude.array[3] = lora_rx_buffer[72];
-					  Sustainer.maxAltitude=f2u8_altitude.fVal;
-
-
+		  f2u8_altitude.array[0] = lora_rx_buffer[69];
+		  f2u8_altitude.array[1] = lora_rx_buffer[70];
+		  f2u8_altitude.array[2] = lora_rx_buffer[71];
+		  f2u8_altitude.array[3] = lora_rx_buffer[72];
+		  Sustainer.maxAltitude=f2u8_altitude.fVal;
 
 
-				     	sprintf(s_altitude,"%4.3f",Sustainer.altitude);
-				     	sprintf(s_temperature,"%2.2f",Sustainer.temperature);
-				     	sprintf(s_speed,"%2.2f",Sustainer.speed);
-				     	sprintf(s_roll,"%2.2f",Sustainer.normal);
-				     	sprintf(s_pitch,"%2.2f",Sustainer.pitch);
-				     	sprintf(s_latitude,"%2.6f",Sustainer.gpslatitude);
-				     	sprintf(s_longitude,"%2.6f",Sustainer.gpslongitude);
-				    	sprintf(s_bat,"%2d",Sustainer.battery);
-				    	sprintf(s_sats,"%2d",Sustainer.satsinview);
-				    	sprintf(s_comm,"%2d",Sustainer.communication);
-				       	sprintf(s_comm,"%2d",Sustainer.communication);
-				       	sprintf(s_dist,"%4.2f",s_distance);
-
-			        	sprintf(e_altitude,"%4.2f",EGU_IRTIFA);
-			         	sprintf(e_angle,"%2.2f",EGU_ANGLE);
-						sprintf(e_bat,"%2d",EGU_BATTERY);
-						sprintf(e_flight,"%d",EGU_UCUS_BASLADIMI);
-			          	sprintf(e_stage,"%d",EGU_AYRILMA_TESPIT);
-			         	sprintf(e_fitil,"%d",EGU_FITIL);
-				        // Nextion_SendFloatToTextbox("s1", Sustainer.altitude);
-				         NEXTION_SendString("s1", s_altitude);
-				         NEXTION_SendString("s2", s_temperature);
-				         NEXTION_SendString("s3", s_speed);
-				         NEXTION_SendString("s4", s_roll);
-				         NEXTION_SendString("s5", s_pitch);
-				         NEXTION_SendString("s6", s_sats);
-				         NEXTION_SendString("s7", s_latitude);
-				         NEXTION_SendString("s8", s_longitude);
-				         NEXTION_SendString("s9", s_bat);
-				         NEXTION_SendString("t57", s_comm);
-				         NEXTION_SendString("t", s_dist);
-
-
-						 NEXTION_SendString("m1", e_altitude);
-						 NEXTION_SendString("m3", e_angle);
-						 NEXTION_SendString("m2", e_bat);
-						 NEXTION_SendString("m4", e_flight);
-						 NEXTION_SendString("m5", e_stage);
 
 }
 
-	  else if(lora_rx_buffer[3]==1 && lora_rx_buffer[50]==0x32){
+	   if(RS_rx_buffer[3]==1 && RS_rx_buffer[50]==0x32){
 
-		  Booster.satsinview=lora_rx_buffer[4];
+		  Booster.satsinview=RS_rx_buffer[4];
 
-			 float2unit8 f2u8_bgpsalt;
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					 f2u8_bgpsalt.array[i]=lora_rx_buffer[i+5];
-					 HYI_BUFFER[34+i]=lora_rx_buffer[i+5]; // 34 35 36 37
-				 }
-				 Booster.gpsaltitude=f2u8_bgpsalt.fVal;
-			 float2unit8 f2u8_blatitude;
+    	  Booster_union_converter();
+		  Booster.battery=RS_rx_buffer[49];
+		  Booster.mod=RS_rx_buffer[73];
+		  Booster.communication=RS_rx_buffer[51];
 
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					 f2u8_blatitude.array[i]=lora_rx_buffer[i+9];
-					 HYI_BUFFER[38+i]=lora_rx_buffer[i+9]; // 38 39 40 41
-				 }
-				 Booster.gpslatitude=f2u8_blatitude.fVal;
-
-			 float2unit8 f2u8_blongitude;
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					 f2u8_blongitude.array[i]=lora_rx_buffer[i+13];
-					 HYI_BUFFER[42+i]=lora_rx_buffer[i+13]; // 42 43 44 45
-				 }
-				 Booster.gpslongitude=f2u8_blongitude.fVal;
-
-			 float2unit8 f2u8_baltitude;
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					f2u8_baltitude.array[i]=lora_rx_buffer[i+17];
-				 }
-				 Booster.altitude=f2u8_baltitude.fVal;
-
-			 float2unit8 f2u8_bspeed;
-
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					 f2u8_bspeed.array[i]=lora_rx_buffer[i+21];
-				 }
-				 Booster.speed=f2u8_bspeed.fVal;
-
-			 float2unit8 f2u8_btemp;
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					 f2u8_btemp.array[i]=lora_rx_buffer[i+25];
-				 }
-				 Booster.temperature=f2u8_btemp.fVal;
-
-			 float2unit8 f2u8_baccx;
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					 f2u8_baccx.array[i]=lora_rx_buffer[i+29];
-				 }
-				 Booster.accx=f2u8_baccx.fVal;
-
-			float2unit8 f2u8_baccy;
-				 for(uint8_t i=0;i<4;i++)
-				 {
-					 f2u8_baccy.array[i]=lora_rx_buffer[i+33];
-				 }
-				 Booster.accy=f2u8_baccy.fVal;
-
-			float2unit8 f2u8_baccz;
-			      for(uint8_t i=0;i<4;i++)
-				 {
-			    	  f2u8_baccz.array[i]=lora_rx_buffer[i+37];
-				 }
-			      Booster.accz=f2u8_baccz.fVal;
-
-			float2unit8 f2u8_broll;
-				  for(uint8_t i=0;i<4;i++)
-				 {
-					  f2u8_broll.array[i]=lora_rx_buffer[i+41];
-				 }
-				  Booster.normal=f2u8_broll.fVal;
-
-			float2unit8 f2u8_bpitch;
-				  for(uint8_t i=0;i<4;i++)
-				 {
-					  f2u8_bpitch.array[i]=lora_rx_buffer[i+45];
-				 }
-				  Booster.pitch=f2u8_bpitch.fVal;
-
-				  Booster.battery=lora_rx_buffer[49];
-				  Booster.mod=lora_rx_buffer[73];
-				  Booster.communication=lora_rx_buffer[51];
-
-				  f2u8_baltitude.array[0] = lora_rx_buffer[69];
-				  f2u8_baltitude.array[1] = lora_rx_buffer[70];
-				  f2u8_baltitude.array[2] = lora_rx_buffer[71];
-				  f2u8_baltitude.array[3] = lora_rx_buffer[72];
-				  Booster.maxAltitude = f2u8_baltitude.fVal;
+		  f2u8_booster.array[0] = RS_rx_buffer[69];
+		  f2u8_booster.array[1] = RS_rx_buffer[70];
+		  f2u8_booster.array[2] = RS_rx_buffer[71];
+		  f2u8_booster.array[3] = RS_rx_buffer[72];
+		  Booster.maxAltitude = f2u8_booster.fVal;
 
 
-			     	sprintf(b_altitude,"%4.3f",Booster.altitude);
-			     	sprintf(b_temperature,"%2.2f",Booster.temperature);
-			     	sprintf(b_speed,"%2.2f",Booster.speed);
-			     	sprintf(b_roll,"%2.2f",Booster.normal);
-			     	sprintf(b_pitch,"%2.2f",Booster.pitch);
-			     	sprintf(b_latitude,"%2.6f",Booster.gpslatitude);
-			     	sprintf(b_longitude,"%2.6f",Booster.gpslongitude);
-			     	sprintf(b_bat,"%2d",Booster.battery);
-			     	sprintf(b_sats,"%2d",Booster.satsinview);
-			       	sprintf(b_comm,"%2d",Booster.communication);
-			       	sprintf(b_dist,"%4.2f",bs_distance);
-
-			        NEXTION_SendString("bs1", b_altitude);
-			        NEXTION_SendString("bs2", b_temperature);
-			        NEXTION_SendString("bs3", b_speed);
-			        NEXTION_SendString("bs4", b_roll);
-			        NEXTION_SendString("bs5", b_pitch);
-			        NEXTION_SendString("bs6", b_sats);
-			        NEXTION_SendString("bs7", b_latitude);
-			        NEXTION_SendString("bs8", b_longitude);
-			        NEXTION_SendString("bs9", b_bat);
-			        NEXTION_SendString("t56", b_comm);
-			        NEXTION_SendString("t17", b_dist);
 	  	  }
 
-	     else if(lora_rx_buffer[3]==3 && lora_rx_buffer[50]==0x33)
+	     else if(RS_rx_buffer[3]==3 && RS_rx_buffer[50]==0x33)
 		  {
 
-		  Payload.satsinview=lora_rx_buffer[4];
+		  Payload.satsinview=RS_rx_buffer[4];
 
 		  Payload_union_converter();
 
-		  Payload.battery=lora_rx_buffer[49];
-		  Payload.mod=lora_rx_buffer[73];
-		  Payload.communication=lora_rx_buffer[51];
+		  Payload.battery=RS_rx_buffer[49];
+		  Payload.mod=RS_rx_buffer[73];
+		  Payload.communication=RS_rx_buffer[51];
 	        // payload ekran
-	     	sprintf(p_altitude,"%4.2f",Payload.altitude);
-	     	sprintf(p_latitude,"%2.6f",Payload.gpslatitude);
-	     	sprintf(p_gpsaltitude,"%4.2f",Payload.gpsaltitude);
-	     	sprintf(p_longitude,"%2.6f",Payload.gpslongitude);
-	     	sprintf(p_bat,"%2d",Payload.battery);
 
-	        NEXTION_SendString("vp1", p_latitude);
-	        NEXTION_SendString("vp2", p_longitude);
-	        NEXTION_SendString("vp3", p_gpsaltitude);
-	        NEXTION_SendString("vp4", p_altitude);
-	        NEXTION_SendString("vp5", p_bat);
 		  }
 
 
-
-
-	  s_distance=distance_in_m(gps.latitude,gps.longitude,sustgpslatitude,sustgpslongitude);
-	  bs_distance=distance_in_m(gps.latitude,gps.longitude,boostgpslatitude,boostgpslongitude);
-
 	  // EKRANA YAZMA
-
 
 
     	sprintf(st_bat,"%2d",(uint8_t)adc_pil_val);
@@ -760,8 +545,7 @@ int main(void)
 
         }
 
-        NEXTION_SendString("m7", e_engine_request);
-        NEXTION_SendString("t59", e_fitil);
+
 
     	for(uint8_t i=4;i<75;i++)
     	{
@@ -786,6 +570,11 @@ if(adc_flag ==1)
 		  adc_pil_val=(float)( ( ( (adc/4095)*3.3)-1.41) / (1.99-1.41) ) *100 ;
 		 // adc_pil_val = (adc-1755)/(2746-1755)*100;
 		  adc_flag=0;
+
+		  s_distance=distance_in_m(gps.latitude,gps.longitude,sustgpslatitude,sustgpslongitude);
+		  bs_distance=distance_in_m(gps.latitude,gps.longitude,boostgpslatitude,boostgpslongitude);
+
+
 	  }
 
     /* USER CODE END WHILE */
@@ -1096,6 +885,59 @@ static void MX_USART3_UART_Init(void)
 }
 
 /**
+  * @brief USART6 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART6_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART6_Init 0 */
+
+  /* USER CODE END USART6_Init 0 */
+
+  /* USER CODE BEGIN USART6_Init 1 */
+
+  /* USER CODE END USART6_Init 1 */
+  huart6.Instance = USART6;
+  huart6.Init.BaudRate = 115200;
+  huart6.Init.WordLength = UART_WORDLENGTH_8B;
+  huart6.Init.StopBits = UART_STOPBITS_1;
+  huart6.Init.Parity = UART_PARITY_NONE;
+  huart6.Init.Mode = UART_MODE_TX_RX;
+  huart6.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart6.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart6) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART6_Init 2 */
+
+  /* USER CODE END USART6_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Stream1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);
+  /* DMA2_Stream1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream1_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -1381,78 +1223,78 @@ void Payload_union_converter(void)
 	 float2unit8 f2u8;
 			 for(uint8_t i=0;i<4;i++)
 			 {
-				 f2u8.array[i]=lora_rx_buffer[i+5];
-				 HYI_BUFFER[22+i]=lora_rx_buffer[i+5]; // 34 35 36 37
+				 f2u8.array[i]=RS_rx_buffer[i+5];
+				 HYI_BUFFER[22+i]=RS_rx_buffer[i+5]; // 34 35 36 37
 			 }
 			 Payload.gpsaltitude=f2u8.fVal;
 
 
 			 for(uint8_t i=0;i<4;i++)
 			 {
-				 f2u8.array[i]=lora_rx_buffer[i+9];
-				 HYI_BUFFER[26+i]=lora_rx_buffer[i+9]; // 38 39 40 41
+				 f2u8.array[i]=RS_rx_buffer[i+9];
+				 HYI_BUFFER[26+i]=RS_rx_buffer[i+9]; // 38 39 40 41
 			 }
 			 Payload.gpslatitude=f2u8.fVal;
 
 			 for(uint8_t i=0;i<4;i++)
 			 {
-				 f2u8.array[i]=lora_rx_buffer[i+13];
-				 HYI_BUFFER[30+i]=lora_rx_buffer[i+13]; // 42 43 44 45
+				 f2u8.array[i]=RS_rx_buffer[i+13];
+				 HYI_BUFFER[30+i]=RS_rx_buffer[i+13]; // 42 43 44 45
 			 }
 			 Payload.gpslongitude=f2u8.fVal;
 
 			 for(uint8_t i=0;i<4;i++)
 			 {
-				 f2u8.array[i]=lora_rx_buffer[i+17];
+				 f2u8.array[i]=RS_rx_buffer[i+17];
 			 }
 			 Payload.altitude=f2u8.fVal;
 
 
 			 for(uint8_t i=0;i<4;i++)
 			 {
-				 f2u8.array[i]=lora_rx_buffer[i+21];
+				 f2u8.array[i]=RS_rx_buffer[i+21];
 			 }
 			 Payload.speed=f2u8.fVal;
 
 
 			 for(uint8_t i=0;i<4;i++)
 			 {
-				 f2u8.array[i]=lora_rx_buffer[i+25];
+				 f2u8.array[i]=RS_rx_buffer[i+25];
 			 }
 			 Payload.temperature=f2u8.fVal;
 
 
 			 for(uint8_t i=0;i<4;i++)
 			 {
-				 f2u8.array[i]=lora_rx_buffer[i+29];
+				 f2u8.array[i]=RS_rx_buffer[i+29];
 			 }
 			 Payload.accx=f2u8.fVal;
 
 
 			 for(uint8_t i=0;i<4;i++)
 			 {
-				 f2u8.array[i]=lora_rx_buffer[i+33];
+				 f2u8.array[i]=RS_rx_buffer[i+33];
 			 }
 			 Payload.accy=f2u8.fVal;
 
 
 		      for(uint8_t i=0;i<4;i++)
 			 {
-		    	  f2u8.array[i]=lora_rx_buffer[i+37];
+		    	  f2u8.array[i]=RS_rx_buffer[i+37];
 			 }
 		      Payload.accz=f2u8.fVal;
 
 
 			  for(uint8_t i=0;i<4;i++)
 			 {
-				  f2u8.array[i]=lora_rx_buffer[i+41];
+				  f2u8.array[i]=RS_rx_buffer[i+41];
 			 }
 			  Payload.normal=f2u8.fVal;
 
 
 			  for(uint8_t i=0;i<4;i++)
 			 {
-				  f2u8.array[i]=lora_rx_buffer[i+45];
+				  f2u8.array[i]=RS_rx_buffer[i+45];
 			 }
 			  Payload.pitch=f2u8.fVal;
 }
@@ -1671,6 +1513,261 @@ void Enum_State_s(void){
 
 
 }
+
+
+void Booster_union_converter(void)
+{
+
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						 f2u8_booster.array[i]=RS_rx_buffer[i+5];
+						 HYI_BUFFER[34+i]=RS_rx_buffer[i+5]; // 34 35 36 37
+					 }
+					 Booster.gpsaltitude=f2u8_booster.fVal;
+
+
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						 f2u8_booster.array[i]=RS_rx_buffer[i+9];
+						 HYI_BUFFER[38+i]=RS_rx_buffer[i+9]; // 38 39 40 41
+					 }
+					 Booster.gpslatitude=f2u8_booster.fVal;
+
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						 f2u8_booster.array[i]=RS_rx_buffer[i+13];
+						 HYI_BUFFER[42+i]=RS_rx_buffer[i+13]; // 42 43 44 45
+					 }
+					 Booster.gpslongitude=f2u8_booster.fVal;
+
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						 f2u8_booster.array[i]=RS_rx_buffer[i+17];
+					 }
+					 Booster.altitude=f2u8_booster.fVal;
+
+
+
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						 f2u8_booster.array[i]=RS_rx_buffer[i+21];
+					 }
+					 Booster.speed=f2u8_booster.fVal;
+
+
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						 f2u8_booster.array[i]=RS_rx_buffer[i+25];
+					 }
+					 Booster.temperature=f2u8_booster.fVal;
+
+
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						 f2u8_booster.array[i]=RS_rx_buffer[i+29];
+					 }
+					 Booster.accx=f2u8_booster.fVal;
+
+
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						 f2u8_booster.array[i]=RS_rx_buffer[i+33];
+					 }
+					 Booster.accy=f2u8_booster.fVal;
+
+
+				      for(uint8_t i=0;i<4;i++)
+					 {
+				    	  f2u8_booster.array[i]=RS_rx_buffer[i+37];
+					 }
+				      Booster.accz=f2u8_booster.fVal;
+
+					  for(uint8_t i=0;i<4;i++)
+					 {
+						  f2u8_booster.array[i]=RS_rx_buffer[i+41];
+					 }
+					  Booster.normal=f2u8_booster.fVal;
+
+					  for(uint8_t i=0;i<4;i++)
+					 {
+						  f2u8_booster.array[i]=RS_rx_buffer[i+45];
+					 }
+					  Booster.pitch=f2u8_booster.fVal;
+}
+
+void Sustainer_union_converter(void)
+{
+	 float2unit8 f2u8_gpsalt;
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						 f2u8_gpsalt.array[i]=lora_rx_buffer[i+5];
+						 HYI_BUFFER[10+i] =lora_rx_buffer[i+5]; // 10 11 12 13
+					 }
+					 Sustainer.gpsaltitude=f2u8_gpsalt.fVal;
+				 float2unit8 f2u8_latitude;
+
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						f2u8_latitude.array[i]=lora_rx_buffer[i+9];
+						HYI_BUFFER[14+i] =lora_rx_buffer[i+9]; // 14 15 16 17
+					 }
+					 Sustainer.gpslatitude=f2u8_latitude.fVal;
+
+				 float2unit8 f2u8_longitude;
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						f2u8_longitude.array[i]=lora_rx_buffer[i+13];
+						HYI_BUFFER[18+i] =lora_rx_buffer[i+13]; // 18 19 20 21
+					 }
+					 Sustainer.gpslongitude=f2u8_longitude.fVal;
+
+				 float2unit8 f2u8_altitude;
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						f2u8_altitude.array[i]=lora_rx_buffer[i+17];
+						HYI_BUFFER[6+i] =lora_rx_buffer[i+17]; // 6 7 8 9
+					 }
+					 Sustainer.altitude=f2u8_altitude.fVal;
+
+				 float2unit8 f2u8_speed;
+
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						 f2u8_speed.array[i]=lora_rx_buffer[i+21];
+					 }
+					 Sustainer.speed=f2u8_speed.fVal;
+
+				 float2unit8 f2u8_temp;
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						 f2u8_temp.array[i]=lora_rx_buffer[i+25];
+					 }
+					 Sustainer.temperature=f2u8_temp.fVal;
+
+				 float2unit8 f2u8_accx;
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						 f2u8_accx.array[i]=lora_rx_buffer[i+29];
+						// HYI_BUFFER[58+i]=lora_rx_buffer[i+29]; //
+					 }
+					 Sustainer.accx=f2u8_accx.fVal;
+
+				float2unit8 f2u8_accy;
+					 for(uint8_t i=0;i<4;i++)
+					 {
+						 f2u8_accy.array[i]=lora_rx_buffer[i+33];
+						 //HYI_BUFFER[62+i]=lora_rx_buffer[i+33];
+					 }
+					 Sustainer.accy=f2u8_accy.fVal;
+
+				float2unit8 f2u8_accz;
+				      for(uint8_t i=0;i<4;i++)
+					 {
+				    	  f2u8_accz.array[i]=lora_rx_buffer[i+37];
+				    	//  HYI_BUFFER[66+i]=lora_rx_buffer[i+37];
+					 }
+				      Sustainer.accz=f2u8_accz.fVal;
+
+				float2unit8 f2u8_roll;
+					  for(uint8_t i=0;i<4;i++)
+					 {
+						  f2u8_roll.array[i]=lora_rx_buffer[i+41];
+					 }
+					  Sustainer.normal=f2u8_roll.fVal;
+
+				float2unit8 f2u8_pitch;
+					  for(uint8_t i=0;i<4;i++)
+					 {
+						  f2u8_pitch.array[i]=lora_rx_buffer[i+45];
+					 }
+					  Sustainer.pitch=f2u8_pitch.fVal;
+
+}
+
+void Screen_Update(void)
+{
+				sprintf(b_altitude,"%4.3f",Booster.altitude);
+		     	sprintf(b_temperature,"%2.2f",Booster.temperature);
+		     	sprintf(b_speed,"%2.2f",Booster.speed);
+		     	sprintf(b_roll,"%2.2f",Booster.normal);
+		     	sprintf(b_pitch,"%2.2f",Booster.pitch);
+		     	sprintf(b_latitude,"%2.6f",Booster.gpslatitude);
+		     	sprintf(b_longitude,"%2.6f",Booster.gpslongitude);
+		     	sprintf(b_bat,"%2d",Booster.battery);
+		     	sprintf(b_sats,"%2d",Booster.satsinview);
+		       	sprintf(b_comm,"%2d",Booster.communication);
+		       	sprintf(b_dist,"%4.2f",bs_distance);
+
+		        NEXTION_SendString("bs1", b_altitude);
+		        NEXTION_SendString("bs2", b_temperature);
+		        NEXTION_SendString("bs3", b_speed);
+		        NEXTION_SendString("bs4", b_roll);
+		        NEXTION_SendString("bs5", b_pitch);
+		        NEXTION_SendString("bs6", b_sats);
+		        NEXTION_SendString("bs7", b_latitude);
+		        NEXTION_SendString("bs8", b_longitude);
+		        NEXTION_SendString("bs9", b_bat);
+		        NEXTION_SendString("t56", b_comm);
+		        NEXTION_SendString("t17", b_dist);
+
+		        NEXTION_SendString("m7", e_engine_request);
+		        NEXTION_SendString("t59", e_fitil);
+
+		     	sprintf(p_altitude,"%4.2f",Payload.altitude);
+				sprintf(p_latitude,"%2.6f",Payload.gpslatitude);
+				sprintf(p_gpsaltitude,"%4.2f",Payload.gpsaltitude);
+				sprintf(p_longitude,"%2.6f",Payload.gpslongitude);
+				sprintf(p_bat,"%2d",Payload.battery);
+
+				NEXTION_SendString("vp1", p_latitude);
+				NEXTION_SendString("vp2", p_longitude);
+				NEXTION_SendString("vp3", p_gpsaltitude);
+				NEXTION_SendString("vp4", p_altitude);
+				NEXTION_SendString("vp5", p_bat);
+
+
+
+				sprintf(s_altitude,"%4.3f",Sustainer.altitude);
+				sprintf(s_temperature,"%2.2f",Sustainer.temperature);
+				sprintf(s_speed,"%2.2f",Sustainer.speed);
+				sprintf(s_roll,"%2.2f",Sustainer.normal);
+				sprintf(s_pitch,"%2.2f",Sustainer.pitch);
+				sprintf(s_latitude,"%2.6f",Sustainer.gpslatitude);
+				sprintf(s_longitude,"%2.6f",Sustainer.gpslongitude);
+				sprintf(s_bat,"%2d",Sustainer.battery);
+				sprintf(s_sats,"%2d",Sustainer.satsinview);
+				sprintf(s_comm,"%2d",Sustainer.communication);
+				sprintf(s_comm,"%2d",Sustainer.communication);
+				sprintf(s_dist,"%4.2f",s_distance);
+
+				sprintf(e_altitude,"%4.2f",EGU_IRTIFA);
+				sprintf(e_angle,"%2.2f",EGU_ANGLE);
+				sprintf(e_bat,"%2d",EGU_BATTERY);
+				sprintf(e_flight,"%d",EGU_UCUS_BASLADIMI);
+				sprintf(e_stage,"%d",EGU_AYRILMA_TESPIT);
+				sprintf(e_fitil,"%d",EGU_FITIL);
+				// Nextion_SendFloatToTextbox("s1", Sustainer.altitude);
+				 NEXTION_SendString("s1", s_altitude);
+				 NEXTION_SendString("s2", s_temperature);
+				 NEXTION_SendString("s3", s_speed);
+				 NEXTION_SendString("s4", s_roll);
+				 NEXTION_SendString("s5", s_pitch);
+				 NEXTION_SendString("s6", s_sats);
+				 NEXTION_SendString("s7", s_latitude);
+				 NEXTION_SendString("s8", s_longitude);
+				 NEXTION_SendString("s9", s_bat);
+				 NEXTION_SendString("t57", s_comm);
+				 NEXTION_SendString("t", s_dist);
+
+
+				 NEXTION_SendString("m1", e_altitude);
+				 NEXTION_SendString("m3", e_angle);
+				 NEXTION_SendString("m2", e_bat);
+				 NEXTION_SendString("m4", e_flight);
+				 NEXTION_SendString("m5", e_stage);
+}
+
+
 /* USER CODE END 4 */
 
 /**
